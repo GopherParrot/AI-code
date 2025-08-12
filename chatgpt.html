@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chromatic Pulse — Canvas Visualization</title>
+  <style>
+    html,body{height:100%;margin:0;background:#05020b;color:#fff;font-family:Inter,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    .wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+    canvas{display:block;max-width:100%;height:100vh;width:100vw}
+    .ui{position:absolute;left:18px;top:18px;backdrop-filter:blur(6px);background:rgba(255,255,255,0.04);border-radius:10px;padding:10px;color:#ddd;font-size:13px}
+    .ui label{display:flex;gap:8px;align-items:center}
+    .credit{position:absolute;right:12px;bottom:10px;color:#9aa0b4;font-size:12px;opacity:0.9}
+    .btn{background:linear-gradient(90deg,#ff7a7a,#8a7bff);padding:6px 10px;border-radius:8px;border:none;color:#05020b;cursor:pointer}
+    a{color:inherit}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <canvas id="c"></canvas>
+    <div class="ui">
+      <div style="font-weight:600;margin-bottom:6px">Chromatic Pulse</div>
+      <label>Particles: <input id="count" type="range" min="50" max="1600" value="420"/></label>
+      <label style="margin-top:6px">Speed: <input id="speed" type="range" min="0.1" max="3" step="0.1" value="1.0"/></label>
+      <div style="margin-top:8px;display:flex;gap:8px"><button id="shuffle" class="btn">Shuffle Palette</button></div>
+    </div>
+    <div class="credit">move your mouse — click to explode • built with Canvas</div>
+  </div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let DPR = Math.max(1, window.devicePixelRatio || 1);
+
+  // Resize with device pixel ratio
+  function resize(){
+    DPR = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = Math.floor(window.innerWidth * DPR);
+    canvas.height = Math.floor(window.innerHeight * DPR);
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    center.set(window.innerWidth/2, window.innerHeight/2);
+  }
+  window.addEventListener('resize', resize);
+
+  // Small Vec2 helper
+  class Vec{constructor(x=0,y=0){this.x=x;this.y=y} set(x,y){this.x=x;this.y=y} copy(){return new Vec(this.x,this.y)}}
+
+  // Globals
+  const center = new Vec(window.innerWidth/2, window.innerHeight/2);
+  let mouse = new Vec(-9999,-9999);
+  let mouseDown = false;
+
+  // Color palettes
+  const palettes = [
+    ['#ffb3c1','#ff7a7a','#7b61ff','#2ad1c9'],
+    ['#ffdf7b','#ff7a59','#ff4d6d','#6b5cff'],
+    ['#2ee6a7','#00c6ff','#7b61ff','#ffd371'],
+    ['#c9ffed','#6ef1ff','#8a7bff','#ffd6f0']
+  ];
+  let palette = palettes[0];
+  function pickPalette(){ palette = palettes[Math.floor(Math.random()*palettes.length)]; }
+
+  // Utility random
+  const rand = (a,b)=> (typeof b==='undefined' ? Math.random()*a : a + Math.random()*(b-a));
+
+  // Stars background
+  const stars = [];
+  function initStars(){ stars.length=0; const total = Math.round((window.innerWidth*window.innerHeight)/14000); for(let i=0;i<total;i++){stars.push({x:Math.random()*window.innerWidth,y:Math.random()*window.innerHeight,r:Math.random()*1.3+0.3,a:Math.random()*0.9+0.1})}};
+
+  // Particle system
+  class Particle{
+    constructor(){ this.reset(true) }
+    reset(initial=false){
+      this.pos = new Vec(center.x + rand(-300,300), center.y + rand(-300,300));
+      const angle = Math.random()*Math.PI*2;
+      const s = rand(0.2,1.6);
+      this.vel = new Vec(Math.cos(angle)*s, Math.sin(angle)*s);
+      this.life = rand(4,11); // seconds
+      this.age = initial ? rand(0,this.life) : 0;
+      this.size = rand(1,6);
+      this.hue = rand(0,1);
+      this.color = palette[Math.floor(Math.random()*palette.length)];
+      this.wander = rand(0.02,0.7);
+      this.mass = rand(0.3,1.8);
+    }
+    update(dt,opts){
+      // Attraction to mouse (if near)
+      const dx = mouse.x - this.pos.x;
+      const dy = mouse.y - this.pos.y;
+      const dist = Math.sqrt(dx*dx+dy*dy) + 0.001;
+      if(dist < opts.interactionRadius){
+        const force = (1 - (dist/opts.interactionRadius)) * (mouseDown ? -1.2 : 1.0) * opts.mousePower;
+        this.vel.x += (dx/dist) * force * dt * this.mass;
+        this.vel.y += (dy/dist) * force * dt * this.mass;
+      }
+
+      // Central vortex
+      const cx = center.x - this.pos.x; const cy = center.y - this.pos.y;
+      this.vel.x += (cx/(10000)) * opts.centerPull * dt;
+      this.vel.y += (cy/(10000)) * opts.centerPull * dt;
+
+      // wander
+      this.vel.x += Math.sin(this.age*3.1 + this.hue*10) * this.wander * dt;
+      this.vel.y += Math.cos(this.age*2.3 + this.hue*7) * this.wander * dt;
+
+      // damping
+      this.vel.x *= (1 - 0.02*dt);
+      this.vel.y *= (1 - 0.02*dt);
+
+      this.pos.x += this.vel.x * dt * opts.speed;
+      this.pos.y += this.vel.y * dt * opts.speed;
+
+      this.age += dt;
+      if(this.age > this.life){ this.reset(); }
+
+      // bounce edges
+      if(this.pos.x < -100 || this.pos.x > window.innerWidth + 100 || this.pos.y < -100 || this.pos.y > window.innerHeight + 100){ this.reset(); }
+    }
+    draw(ctx,alpha=1){
+      ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.size, 0, Math.PI*2);
+      ctx.closePath();
+      ctx.globalAlpha = 0.55 * alpha;
+      ctx.fillStyle = this.color;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  let particles = [];
+  function initParticles(n=420){ particles = []; for(let i=0;i<n;i++) particles.push(new Particle()); }
+
+  // Offscreen canvas for glow/bloom
+  const bloom = document.createElement('canvas'); const bctx = bloom.getContext('2d');
+  function resizeBloom(){ bloom.width = canvas.width; bloom.height = canvas.height; }
+
+  // Options bound to UI
+  const opts = { speed:1, interactionRadius:220, mousePower:2.2, centerPull:0.6 };
+
+  // Explosion
+  function explode(x,y,size=40){ for(let i=0;i<30;i++){ const p = new Particle(); p.pos.set(x + rand(-size,size), y + rand(-size,size)); const angle = Math.random()*Math.PI*2; const speed = rand(1.2,6); p.vel = new Vec(Math.cos(angle)*speed, Math.sin(angle)*speed); p.life = rand(1.5,3.5); particles.push(p); } }
+
+  // Mouse events
+  window.addEventListener('mousemove', (e)=>{ mouse.set(e.clientX, e.clientY) });
+  window.addEventListener('mouseleave', ()=>{ mouse.set(-9999, -9999) });
+  window.addEventListener('mousedown', (e)=>{ mouseDown = true; explode(e.clientX, e.clientY, 120); });
+  window.addEventListener('mouseup', ()=>{ mouseDown = false });
+
+  // UI bindings
+  document.getElementById('count').addEventListener('input', (e)=>{ const v = +e.target.value; initParticles(v); });
+  document.getElementById('speed').addEventListener('input', (e)=>{ opts.speed = +e.target.value; });
+  document.getElementById('shuffle').addEventListener('click', ()=>{ pickPalette(); for(const p of particles){ p.color = palette[Math.floor(Math.random()*palette.length)]; } });
+
+  // Background gradient
+  function drawBackground(ctx, t){
+    const g = ctx.createLinearGradient(0,0,window.innerWidth,window.innerHeight);
+    // cycle hues over time
+    const h1 = (Math.sin(t*0.00012) * 0.5 + 0.5);
+    g.addColorStop(0, '#05020b');
+    g.addColorStop(0.25, palette[0] + '33');
+    g.addColorStop(0.6, palette[1] + '22');
+    g.addColorStop(1, '#040213');
+    ctx.fillStyle = g; ctx.fillRect(0,0,window.innerWidth, window.innerHeight);
+  }
+
+  // Render loop
+  let last = performance.now();
+  function loop(now){
+    const dt = Math.min(0.055, (now - last)/1000); last = now;
+
+    // subtle motion blur: draw translucent rect to fade previous frame
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(4,4,8,0.22)';
+    ctx.fillRect(0,0,window.innerWidth, window.innerHeight);
+
+    drawBackground(ctx, now);
+
+    // stars
+    ctx.save();
+    for(const s of stars){ ctx.globalAlpha = s.a * 0.8; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill(); }
+    ctx.restore();
+
+    // update & draw particles onto bloom canvas for glow
+    bctx.clearRect(0,0,bloom.width,bloom.height);
+    for(const p of particles){ p.update(dt,opts); p.draw(bctx, 1); }
+
+    // apply blur on bloom
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // draw blurred bloom onto main canvas using ctx.filter when available
+    if('filter' in ctx){ bctx.filter = 'blur(10px)'; const temp = document.createElement('canvas'); temp.width = bloom.width; temp.height = bloom.height; const tctx = temp.getContext('2d'); tctx.drawImage(bloom,0,0); tctx.filter = 'blur(12px)'; tctx.drawImage(bloom,0,0); ctx.drawImage(temp,0,0); bctx.filter = 'none'; }
+    else { ctx.drawImage(bloom,0,0); }
+    ctx.restore();
+
+    // draw crisp particles on top
+    for(const p of particles){ p.draw(ctx, 1.0); }
+
+    // subtle radial vignette
+    const rv = ctx.createRadialGradient(center.x, center.y, Math.max(window.innerWidth, window.innerHeight)*0.1, center.x, center.y, Math.max(window.innerWidth, window.innerHeight)*0.9);
+    rv.addColorStop(0, 'rgba(0,0,0,0)'); rv.addColorStop(1, 'rgba(0,0,0,0.45)');
+    ctx.fillStyle = rv; ctx.fillRect(0,0,window.innerWidth, window.innerHeight);
+
+    // nice HUD circle around mouse
+    if(mouse.x > -1000){ ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 14, 0, Math.PI*2); ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 2; ctx.stroke(); }
+
+    requestAnimationFrame(loop);
+  }
+
+  // Initialize
+  resize(); initStars(); initParticles(420); resizeBloom(); pickPalette();
+  // fill stars with slight parallax motion
+  for(let i=0;i<stars.length;i++){ stars[i].x += Math.sin(i)*0.3; }
+
+  // animate subtle star drift
+  setInterval(()=>{ for(const s of stars){ s.x += rand(-0.8,0.8); s.y += rand(-0.3,0.3); if(s.x < 0) s.x = window.innerWidth; if(s.x>window.innerWidth) s.x=0; if(s.y<0) s.y=window.innerHeight; if(s.y>window.innerHeight) s.y=0; } }, 120);
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
