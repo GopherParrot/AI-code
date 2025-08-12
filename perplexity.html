@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Particle Orbit Flow Animation</title>
+<style>
+  body, html {
+    margin: 0; 
+    height: 100%; 
+    overflow: hidden; 
+    background-color: #000;
+  }
+  canvas {
+    display: block;
+    background-color: #000;
+  }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<script>
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+
+  let width, height, centerX, centerY;
+  function resize() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    centerX = width / 2;
+    centerY = height / 2;
+    canvas.width = width;
+    canvas.height = height;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // Particle class representing one orbiting particle
+  class Particle {
+    constructor(radius, angle, speed, size, color) {
+      this.radius = radius;    // orbit radius
+      this.angle = angle;      // current angle in radians
+      this.speed = speed;      // angular speed in radians/frame
+      this.size = size;        // size of particle
+      this.color = color;      // base color as hsl string
+      this.x = 0;
+      this.y = 0;
+    }
+
+    update() {
+      this.angle += this.speed;
+      this.x = centerX + Math.cos(this.angle) * this.radius;
+      this.y = centerY + Math.sin(this.angle) * this.radius;
+    }
+
+    draw(ctx) {
+      // Create radial gradient for glow effect
+      const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size * 6);
+      gradient.addColorStop(0, this.color);
+      gradient.addColorStop(0.3, 'rgba(255,255,255,0.8)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size * 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 12;
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  // Generate particles with varying radius and speeds
+  const particles = [];
+  const rings = 6;
+  const maxRadius = Math.min(centerX, centerY) * 0.9;
+
+  // Create particles arranged in rings
+  for (let r = 1; r <= rings; r++) {
+    const radius = (r / rings) * maxRadius;
+    const count = 12 + r * 6; // Increasing particles per ring
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      // Speed varies with ring, creating interesting overlaps
+      const speed = 0.002 * (r % 2 === 0 ? 1 : -1) * (1 + Math.random() * 0.5);
+      // Particle size smaller for larger rings
+      const size = 1.5 + 1 / r;
+      // Dynamic hue based on radius and index
+      const hue = (radius * 30 + i * 360 / count) % 360;
+      const color = `hsl(${hue}, 100%, 65%)`;
+      particles.push(new Particle(radius, angle, speed, size, color));
+    }
+  }
+
+  // Animation loop
+  function animate() {
+    // Darken with reduced opacity for fading trails effect
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+    ctx.fillRect(0, 0, width, height);
+
+    particles.forEach(p => {
+      p.update();
+      p.draw(ctx);
+    });
+
+    // Central glowing core
+    const coreGradient = ctx.createRadialGradient(centerX, centerY, 10, centerX, centerY, maxRadius * 0.25);
+    coreGradient.addColorStop(0, 'rgba(255,255,255,0.8)');
+    coreGradient.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = coreGradient;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, maxRadius * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+
+    requestAnimationFrame(animate);
+  }
+
+  animate();
+
+</script>
+</body>
+</html>
