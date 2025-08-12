@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Particle Fluid System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0c0c0c, #1a1a2e, #16213e);
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+        }
+
+        canvas {
+            display: block;
+            background: transparent;
+            cursor: crosshair;
+        }
+
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .control-item {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="range"] {
+            width: 120px;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+    <div class="controls">
+        <h3 style="margin-bottom: 15px; color: #64ffda;">Particle Controls</h3>
+        <div class="control-item">
+            <label>Particles:</label>
+            <input type="range" id="particleCount" min="100" max="2000" value="800">
+            <span id="particleValue">800</span>
+        </div>
+        <div class="control-item">
+            <label>Flow Speed:</label>
+            <input type="range" id="flowSpeed" min="0.1" max="5" step="0.1" value="1.5">
+            <span id="speedValue">1.5</span>
+        </div>
+        <div class="control-item">
+            <label>Connection Distance:</label>
+            <input type="range" id="connectionDist" min="50" max="200" value="120">
+            <span id="distValue">120</span>
+        </div>
+        <div class="control-item">
+            <button onclick="togglePause()">⏯️ Pause/Play</button>
+            <button onclick="resetSystem()">🔄 Reset</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        let width, height, particles = [], mouse = { x: 0, y: 0, pressed: false };
+        let animationId, isPaused = false;
+        let time = 0;
+
+        // Configuration
+        let config = {
+            particleCount: 800,
+            flowSpeed: 1.5,
+            connectionDistance: 120,
+            mouseInfluence: 150
+        };
+
+        // Resize canvas
+        function resizeCanvas() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        // Particle class with enhanced behavior
+        class Particle {
+            constructor() {
+                this.reset();
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = (Math.random() - 0.5) * 2;
+                this.life = Math.random() * 100 + 100;
+                this.maxLife = this.life;
+                this.hue = Math.random() * 360;
+                this.size = Math.random() * 3 + 1;
+                this.originalSize = this.size;
+            }
+
+            reset() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.life = Math.random() * 100 + 100;
+                this.maxLife = this.life;
+                this.hue = Math.random() * 360;
+            }
+
+            update() {
+                // Fluid-like movement with perlin noise simulation
+                const noiseX = Math.sin(this.x * 0.005 + time * 0.02) * 0.5;
+                const noiseY = Math.cos(this.y * 0.005 + time * 0.02) * 0.5;
+                
+                this.vx += noiseX * config.flowSpeed * 0.1;
+                this.vy += noiseY * config.flowSpeed * 0.1;
+
+                // Mouse interaction with fluid dynamics
+                const dx = mouse.x - this.x;
+                const dy = mouse.y - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < config.mouseInfluence) {
+                    const force = (config.mouseInfluence - distance) / config.mouseInfluence;
+                    const angle = Math.atan2(dy, dx);
+                    
+                    if (mouse.pressed) {
+                        // Attract to mouse when pressed
+                        this.vx += Math.cos(angle) * force * 0.5;
+                        this.vy += Math.sin(angle) * force * 0.5;
+                    } else {
+                        // Repel from mouse when not pressed
+                        this.vx -= Math.cos(angle) * force * 0.3;
+                        this.vy -= Math.sin(angle) * force * 0.3;
+                    }
+                    
+                    // Enhance particle when near mouse
+                    this.size = this.originalSize * (1 + force * 2);
+                    this.hue = (this.hue + force * 5) % 360;
+                } else {
+                    this.size = this.originalSize;
+                }
+
+                // Apply velocity with damping
+                this.x += this.vx * config.flowSpeed;
+                this.y += this.vy * config.flowSpeed;
+                this.vx *= 0.98;
+                this.vy *= 0.98;
+
+                // Boundary wrapping with smooth transition
+                if (this.x < 0) this.x = width;
+                if (this.x > width) this.x = 0;
+                if (this.y < 0) this.y = height;
+                if (this.y > height) this.y = 0;
+
+                // Life cycle
+                this.life--;
+                if (this.life <= 0) {
+                    this.reset();
+                }
+
+                // Color cycling
+                this.hue += 0.5;
+                if (this.hue > 360) this.hue = 0;
+            }
+
+            draw() {
+                const alpha = this.life / this.maxLife;
+                const gradient = ctx.createRadialGradient(
+                    this.x, this.y, 0,
+                    this.x, this.y, this.size * 2
+                );
+                
+                gradient.addColorStop(0, `hsla(${this.hue}, 100%, 70%, ${alpha * 0.8})`);
+                gradient.addColorStop(1, `hsla(${this.hue}, 100%, 50%, 0)`);
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Initialize particles
+        function initParticles() {
+            particles = [];
+            for (let i = 0; i < config.particleCount; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        // Draw connections between nearby particles
+        function drawConnections() {
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < config.connectionDistance) {
+                        const opacity = 1 - (distance / config.connectionDistance);
+                        const hue = (particles[i].hue + particles[j].hue) / 2;
+                        
+                        ctx.strokeStyle = `hsla(${hue}, 70%, 60%, ${opacity * 0.3})`;
+                        ctx.lineWidth = opacity * 2;
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        // Animation loop
+        function animate() {
+            if (!isPaused) {
+                ctx.fillStyle = 'rgba(12, 12, 12, 0.1)';
+                ctx.fillRect(0, 0, width, height);
+
+                drawConnections();
+
+                particles.forEach(particle => {
+                    particle.update();
+                    particle.draw();
+                });
+
+                time += 1;
+            }
+            
+            animationId = requestAnimationFrame(animate);
+        }
+
+        // Event listeners
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            initParticles();
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        canvas.addEventListener('mousedown', () => {
+            mouse.pressed = true;
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            mouse.pressed = false;
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            mouse.pressed = false;
+        });
+
+        // Control functions
+        function updateParticleCount() {
+            const value = document.getElementById('particleCount').value;
+            config.particleCount = parseInt(value);
+            document.getElementById('particleValue').textContent = value;
+            initParticles();
+        }
+
+        function updateFlowSpeed() {
+            const value = document.getElementById('flowSpeed').value;
+            config.flowSpeed = parseFloat(value);
+            document.getElementById('speedValue').textContent = value;
+        }
+
+        function updateConnectionDistance() {
+            const value = document.getElementById('connectionDist').value;
+            config.connectionDistance = parseInt(value);
+            document.getElementById('distValue').textContent = value;
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+        }
+
+        function resetSystem() {
+            time = 0;
+            initParticles();
+        }
+
+        // Control event listeners
+        document.getElementById('particleCount').addEventListener('input', updateParticleCount);
+        document.getElementById('flowSpeed').addEventListener('input', updateFlowSpeed);
+        document.getElementById('connectionDist').addEventListener('input', updateConnectionDistance);
+
+        // Initialize
+        resizeCanvas();
+        initParticles();
+        animate();
+    </script>
+</body>
+</html>
