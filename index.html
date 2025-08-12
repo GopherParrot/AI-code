@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+	<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ai model code overview</title>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin: 0 0 10px 0;
+            text-align: center;
+        }
+
+        select {
+            font-family: 'Inter', sans-serif;
+            padding: 10px 15px;
+            font-size: 1rem;
+            border-radius: 8px;
+            border: 1px solid #30363d;
+            background-color: #161b22;
+            color: #c9d1d9;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        select:focus {
+            border-color: #58a6ff;
+            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.5);
+        }
+
+        .output-container {
+            width: 100%;
+            max-width: 1200px;
+            height: 380px;
+            border: 2px solid #30363d;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            overflow: hidden;
+            flex-grow: 1;
+        }
+
+        #codeOutputFrame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background-color: #161b22;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <select id="modelSelector">
+            <option value="gemini" selected>Gemini 2.5 Flash</option>
+            <option value="claude">Claude Sonnet 4</option>
+            <option value="chatgpt">ChatGPT 5</option>
+            <option value="grok">Grok 3</option>
+            <option value="deepseek">Deepseek</option>
+            <option value="copilot">Microsoft Copilot</option>
+            <option value="perplexity">Perplexity</option>
+			<option value="links">Links to each project</option>
+        </select>
+    </div>
+
+    <div class="output-container">
+        <iframe id="codeOutputFrame"></iframe>
+    </div>
+
+    <script>
+		alert("Prompt: Create an interesting and engaging visualization using html/javascript. Use the Canvas tool so i can run it here. Make the animation as high quality and visually engaging as you possibly can.");
+		alert("NOTE: It doesn't work that well on a phone, so if you are using a phone to run this project, i wouldn't recommended, since it's was built for desktop, I'm very sorry for the inconvenient :(");
+		alert("Tell me which one was your favourite :) in my opinion, Claude is my favourite");
+        const modelSelector = document.getElementById('modelSelector');
+        const codeOutputFrame = document.getElementById('codeOutputFrame');
+
+        const codeSnippets = {
+            gemini: 'gemini.html',
+            claude: 'claude.html',
+            chatgpt: 'chatgpt.html',
+            grok: 'grok.html',
+            deepseek: 'deepseek.html',
+            copilot: 'copilot',
+            perplexity: 'perplexity.html'
+        };
+
+        function updateIframeContent(key) {
+            const filePath = codeSnippets[key];
+            if (filePath) {
+                codeOutputFrame.src = filePath;
+            }
+        }
+
+        modelSelector.addEventListener('change', (event) => {
+            updateIframeContent(event.target.value);
+        });
+
+        window.onload = () => {
+            updateIframeContent(modelSelector.value);
+        };
+    	</script>
+	</body>
+</html>
